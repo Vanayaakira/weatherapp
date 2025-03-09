@@ -8,6 +8,30 @@ wIcon = weatherPart.querySelector("img"),
 arrowBack = wrapper.querySelector("header i");
 
 let api;
+let weatherData = {}; // Store weather data for additional features
+
+// Add theme toggle functionality
+const body = document.body;
+const themeToggle = document.createElement("div");
+themeToggle.className = "theme-toggle";
+themeToggle.innerHTML = '<i class="bx bx-moon"></i>';
+document.body.appendChild(themeToggle);
+
+themeToggle.addEventListener("click", () => {
+    body.classList.toggle("dark-theme");
+    if (body.classList.contains("dark-theme")) {
+        themeToggle.innerHTML = '<i class="bx bx-sun"></i>';
+    } else {
+        themeToggle.innerHTML = '<i class="bx bx-moon"></i>';
+    }
+    localStorage.setItem("weather-theme", body.classList.contains("dark-theme") ? "dark" : "light");
+});
+
+// Check if theme preference is stored
+if(localStorage.getItem("weather-theme") === "dark") {
+    body.classList.add("dark-theme");
+    themeToggle.innerHTML = '<i class="bx bx-sun"></i>';
+}
 
 inputField.addEventListener("keyup", e =>{
     // if user pressed enter btn and input value is not empty
@@ -46,7 +70,10 @@ function fetchData(){
     infoTxt.classList.add("pending");
     // getting api response and returning it with parsing into js obj and in another 
     // then function calling weatherDetails function with passing api result as an argument
-    fetch(api).then(res => res.json()).then(result => weatherDetails(result)).catch(() =>{
+    fetch(api).then(res => res.json()).then(result => {
+        weatherData = result; // Store data globally
+        weatherDetails(result);
+    }).catch(() =>{
         infoTxt.innerText = "Something went wrong";
         infoTxt.classList.replace("pending", "error");
     });
@@ -61,7 +88,10 @@ function weatherDetails(info){
         const city = info.name;
         const country = info.sys.country;
         const {description, id} = info.weather[0];
-        const {temp, feels_like, humidity} = info.main;
+        const {temp, feels_like, humidity, pressure} = info.main;
+        const windSpeed = info.wind.speed;
+        const sunrise = formatTime(info.sys.sunrise * 1000);
+        const sunset = formatTime(info.sys.sunset * 1000);
 
         // using custom weather icon according to the id which api gives to us
         if(id == 800){
@@ -84,13 +114,107 @@ function weatherDetails(info){
         weatherPart.querySelector(".location span").innerText = `${city}, ${country}`;
         weatherPart.querySelector(".temp .numb-2").innerText = Math.floor(feels_like);
         weatherPart.querySelector(".humidity span").innerText = `${humidity}%`;
+        
+        // Create weather metrics section if it doesn't exist
+        if (!document.querySelector(".weather-metrics")) {
+            // Create and add additional metrics
+            const metricsSection = document.createElement("div");
+            metricsSection.className = "weather-metrics";
+            
+            metricsSection.innerHTML = `
+                <div class="metric-item">
+                    <i class='bx bx-wind'></i>
+                    <span>${(windSpeed * 3.6).toFixed(1)} km/h</span>
+                    <p>Wind Speed</p>
+                </div>
+                <div class="metric-item">
+                    <i class='bx bx-trending-up'></i>
+                    <span>${pressure} hPa</span>
+                    <p>Pressure</p>
+                </div>
+                <div class="metric-item">
+                    <i class='bx bx-sun'></i>
+                    <span>${sunrise}</span>
+                    <p>Sunrise</p>
+                </div>
+                <div class="metric-item">
+                    <i class='bx bx-moon'></i>
+                    <span>${sunset}</span>
+                    <p>Sunset</p>
+                </div>
+            `;
+            
+            // Insert before bottom-details
+            const bottomDetails = weatherPart.querySelector(".bottom-details");
+            weatherPart.insertBefore(metricsSection, bottomDetails);
+        } else {
+            // Update existing metrics
+            const metricItems = document.querySelectorAll(".metric-item span");
+            metricItems[0].innerText = `${(windSpeed * 3.6).toFixed(1)} km/h`;
+            metricItems[1].innerText = `${pressure} hPa`;
+            metricItems[2].innerText = sunrise;
+            metricItems[3].innerText = sunset;
+        }
+        
         infoTxt.classList.remove("pending", "error");
         infoTxt.innerText = "";
         inputField.value = "";
         wrapper.classList.add("active");
+        
+        // Save last search to localStorage
+        saveLastSearch(city);
     }
 }
+
+// Function to format time from timestamp
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    
+    return `${hours}:${minutes < 10 ? '0' + minutes : minutes} ${ampm}`;
+}
+
+// Save last search
+function saveLastSearch(city) {
+    localStorage.setItem("lastCity", city);
+}
+
+// Load last search on page load
+window.addEventListener("DOMContentLoaded", () => {
+    const lastCity = localStorage.getItem("lastCity");
+    if (lastCity) {
+        setTimeout(() => {
+            requestApi(lastCity);
+        }, 1000);
+    }
+});
 
 arrowBack.addEventListener("click", ()=>{
     wrapper.classList.remove("active");
 });
+
+// Add responsive handling
+function handleResize() {
+    const width = window.innerWidth;
+    if (width < 480) {
+        // Mobile view adjustments
+        document.querySelectorAll(".metric-item").forEach(item => {
+            item.style.width = "90%";
+        });
+    } else {
+        // Reset for larger screens
+        document.querySelectorAll(".metric-item").forEach(item => {
+            item.style.width = "auto";
+        });
+    }
+}
+
+// Listen for window resize
+window.addEventListener("resize", handleResize);
+// Call once on load
+handleResize();
